@@ -3,94 +3,78 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FreeTool · 免费在线图片工具</title>
-  <meta name="description" content="AI 去背景、图片放大、在线压缩，免费且不加水印。纯 Cloudflare 边缘运行。" />
+  <title>FreeTool · 免费在线工具箱</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <header class="site-header">
-    <div class="brand">
-      <span class="logo">⚡</span>
-      <div>
-        <h1>FreeTool</h1>
-        <p>免费在线图片工具 · AI 去背景 · 图片放大 · 在线压缩</p>
-      </div>
+  <header class="hero">
+    <div class="hero-inner">
+      <h1 class="logo">FreeTool</h1>
+      <p class="tagline">免费在线工具箱 · 图片处理，本地完成，不上传服务器</p>
     </div>
-    <span class="badge">Powered by Cloudflare Edge</span>
   </header>
 
-  <main class="grid">
-    <!-- 去背景 -->
-    <section class="card">
-      <h2>🪄 AI 去背景</h2>
-      <p class="desc">一键抠图，导出透明 PNG（底层 BiRefNet 模型，在 Cloudflare 边缘运行）。</p>
-      <div class="dropzone" data-tool="bg">
-        <input type="file" accept="image/*" hidden />
-        <span>点击或拖拽图片到这里</span>
+  <main class="container">
+    <section class="tool-card">
+      <div class="tool-head">
+        <h2>图片压缩</h2>
+        <span class="badge">纯浏览器运行</span>
       </div>
-      <div class="result" hidden>
-        <img alt="去背景结果" />
-        <div class="actions">
-          <a class="btn" download="removed-bg.png">下载 PNG</a>
-          <button class="btn ghost reset">换一张</button>
+      <p class="tool-desc">选择图片后，压缩在您的设备本地完成，图片不会上传到任何服务器。</p>
+
+      <div id="dropzone" class="dropzone">
+        <input type="file" id="fileInput" accept="image/*" hidden />
+        <div class="dz-text">
+          <strong>点击选择</strong> 或拖拽图片到此处
+          <small>支持 PNG / JPEG / WebP / GIF，单张最大 20MB</small>
         </div>
       </div>
-    </section>
 
-    <!-- 放大 -->
-    <section class="card">
-      <h2>🔍 图片 2 倍放大</h2>
-      <p class="desc">超分模型（ESRGAN）重建细节，小图放大一倍不糊。</p>
-      <div class="dropzone" data-tool="up">
-        <input type="file" accept="image/*" hidden />
-        <span>点击或拖拽图片到这里</span>
-      </div>
-      <div class="result" hidden>
-        <img alt="放大结果" />
-        <div class="actions">
-          <a class="btn" download="upscaled.png">下载 PNG</a>
-          <button class="btn ghost reset">换一张</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- 压缩（浏览器本地） -->
-    <section class="card">
-      <h2>🗜️ 图片压缩</h2>
-      <p class="desc">浏览器本地完成，图片不上传，可输出 JPG / WebP / PNG。</p>
-      <div class="dropzone" data-tool="cp">
-        <input type="file" accept="image/*" hidden />
-        <span>点击或拖拽图片到这里</span>
-      </div>
-      <div class="opts" hidden>
-        <label>格式
-          <select class="fmt">
-            <option value="image/jpeg">JPEG</option>
-            <option value="image/webp">WebP</option>
+      <div class="options" id="options" hidden>
+        <label class="opt">
+          输出格式
+          <select id="format">
+            <option value="keep">保持原格式</option>
+            <option value="image/jpeg">JPG</option>
             <option value="image/png">PNG</option>
+            <option value="image/webp">WebP</option>
           </select>
         </label>
-        <label class="q-label">质量 <span class="q-val">80</span>
-          <input type="range" class="q" min="10" max="100" value="80" />
+        <label class="opt">
+          质量 <span id="qualityVal">80</span>
+          <input type="range" id="quality" min="10" max="100" value="80" />
         </label>
-        <label>最大宽度（0=不限制）
-          <input type="number" class="maxw" min="0" step="100" value="0" />
+        <label class="opt">
+          最大宽度（0 = 不限制）
+          <input type="number" id="maxWidth" min="0" step="100" value="0" />
         </label>
-        <button class="btn run">开始压缩</button>
+        <button id="compressBtn" class="btn">开始压缩</button>
       </div>
-      <div class="result" hidden>
-        <img alt="压缩结果" />
-        <div class="meta"></div>
-        <div class="actions">
-          <a class="btn" download="compressed">下载</a>
-          <button class="btn ghost reset">换一张</button>
+
+      <div class="result" id="result" hidden>
+        <div class="compare">
+          <div class="col">
+            <span class="label">原图</span>
+            <span id="origSize" class="size">—</span>
+          </div>
+          <div class="col">
+            <span class="label">压缩后</span>
+            <span id="newSize" class="size">—</span>
+          </div>
         </div>
+        <p id="saved" class="saved"></p>
+        <a id="downloadLink" class="btn btn-download" download>下载压缩后的图片</a>
+        <button id="resetBtn" class="btn btn-ghost">再压一张</button>
       </div>
+
+      <p id="status" class="status"></p>
     </section>
+
+    <p class="coming">更多工具（去背景、放大、格式转换等）即将上线。</p>
   </main>
 
-  <footer class="site-footer">
-    <p>所有处理在 Cloudflare 全球边缘节点完成 · 免费 · 不加水印</p>
+  <footer class="foot">
+    <span>Powered by Cloudflare Workers + GitHub</span>
   </footer>
 
   <script src="/app.js"></script>

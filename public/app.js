@@ -1,128 +1,75 @@
-// FreeTool-CF 前端逻辑（原生 JS，无需构建）
-const $ = (sel, root = document) => root.querySelector(sel);
+// FreeTool-CF 极简版前端：仅图片压缩，纯浏览器端，不调用任何后端接口
+const $ = (id) => document.getElementById(id);
 
-function setupDropzone(zone, onFile) {
-  const input = $("input", zone);
-  zone.addEventListener("click", () => input.click());
-  input.addEventListener("change", () => input.files[0] && onFile(input.files[0]));
-  ["dragover", "dragenter"].forEach((ev) =>
-    zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add("drag"); })
-  );
-  ["dragleave", "drop"].forEach((ev) =>
-    zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove("drag"); })
-  );
-  zone.addEventListener("drop", (e) => {
-    const f = e.dataTransfer.files[0];
-    if (f) onFile(f);
-  });
+const dropzone = $("dropzone");
+const fileInput = $("fileInput");
+const options = $("options");
+const result = $("result");
+const status = $("status");
+
+let currentFile = null;
+
+// 选择 / 拖拽
+dropzone.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => fileInput.files[0] && loadFile(fileInput.files[0]));
+["dragover", "dragenter"].forEach((ev) =>
+  dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.add("drag"); })
+);
+["dragleave", "drop"].forEach((ev) =>
+  dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove("drag"); })
+);
+dropzone.addEventListener("drop", (e) => {
+  const f = e.dataTransfer.files[0];
+  if (f) loadFile(f);
+});
+
+$("quality").addEventListener("input", (e) => { $("qualityVal").textContent = e.target.value; });
+
+function loadFile(file) {
+  if (!/^image\//.test(file.type)) { status.textContent = "请选择图片文件"; return; }
+  if (file.size > 20 * 1024 * 1024) { status.textContent = "图片超过 20MB 上限"; return; }
+  currentFile = file;
+  status.textContent = "";
+  result.hidden = true;
+  options.hidden = false;
 }
 
-function showResult(card, blob, filename) {
-  const result = $(".result", card);
-  const img = $("img", result);
-  const link = $("a.btn", result);
-  const url = URL.createObjectURL(blob);
-  img.src = url;
-  link.href = url;
-  link.download = filename;
-  result.hidden = false;
-  $(".opts", card)?.setAttribute("hidden", "");
-}
-
-function setLoading(card, loading) {
-  const btn = $(".btn.run", card);
-  if (btn) btn.disabled = loading;
-}
-
-async function postImage(path, file, extra = {}) {
-  const fd = new FormData();
-  fd.append("image", file);
-  for (const [k, v] of Object.entries(extra)) fd.append(k, v);
-  const res = await fetch(path, { method: "POST", body: fd });
-  if (!res.ok) {
-    let msg = "处理失败";
-    try { msg = (await res.json()).error || msg; } catch {}
-    throw new Error(msg);
+$("compressBtn").addEventListener("click", async () => {
+  if (!currentFile) return;
+  const btn = $("compressBtn");
+  btn.disabled = true;
+  status.textContent = "压缩中…";
+  try {
+    const fmt = $("format").value === "keep" ? (currentFile.type || "image/jpeg") : $("format").value;
+    const quality = parseInt($("quality").value, 10) / 100;
+    const maxw = parseInt($("maxWidth").value, 10) || 0;
+    const blob = await compress(currentFile, fmt, quality, maxw);
+    const origKb = currentFile.size / 1024;
+    const newKb = blob.size / 1024;
+    const saved = Math.max(0, 100 - (blob.size / currentFile.size) * 100);
+    $("origSize").textContent = origKb.toFixed(1) + " KB";
+    $("newSize").textContent = newKb.toFixed(1) + " KB";
+    $("saved").textContent = `节省 ${saved.toFixed(0)}%`;
+    const url = URL.createObjectURL(blob);
+    const dl = $("downloadLink");
+    dl.href = url;
+    dl.download = "compressed." + extOf(fmt);
+    result.hidden = false;
+    status.textContent = "";
+  } catch (e) {
+    status.textContent = "压缩失败：" + e.message;
+  } finally {
+    btn.disabled = false;
   }
-  return res.blob();
-}
-
-// ---------- 去背景 ----------
-document.querySelectorAll('.dropzone[data-tool="bg"]').forEach((zone) => {
-  const card = zone.closest(".card");
-  setupDropzone(zone, async (file) => {
-    try {
-      const blob = await postImage("/api/remove-bg", file);
-      showResult(card, blob, "removed-bg.png");
-    } catch (e) { alert(e.message); }
-  });
 });
 
-// ---------- 放大 ----------
-document.querySelectorAll('.dropzone[data-tool="up"]').forEach((zone) => {
-  const card = zone.closest(".card");
-  setupDropzone(zone, async (file) => {
-    try {
-      const dims = await readDims(file); // 先拿原始尺寸
-      const blob = await postImage("/api/upscale", file, { w: dims.w, h: dims.h });
-      showResult(card, blob, "upscaled.png");
-    } catch (e) { alert(e.message); }
-  });
+$("resetBtn").addEventListener("click", () => {
+  currentFile = null;
+  fileInput.value = "";
+  options.hidden = true;
+  result.hidden = true;
+  status.textContent = "";
 });
-
-// ---------- 压缩（纯浏览器） ----------
-document.querySelectorAll('.dropzone[data-tool="cp"]').forEach((zone) => {
-  const card = zone.closest(".card");
-  const opts = $(".opts", card);
-  let currentFile = null;
-
-  setupDropzone(zone, (file) => {
-    currentFile = file;
-    opts.hidden = false;
-  });
-
-  $(".run", opts).addEventListener("click", async () => {
-    if (!currentFile) return;
-    setLoading(card, true);
-    try {
-      const fmt = $(".fmt", opts).value;
-      const quality = parseInt($(".q", opts).value, 10) / 100;
-      const maxw = parseInt($(".maxw", opts).value, 10) || 0;
-      const blob = await compress(currentFile, fmt, quality, maxw);
-      const orig = currentFile.size;
-      showResult(card, blob, "compressed." + extOf(fmt));
-      $(".meta", card).textContent =
-        `原图 ${(orig / 1024).toFixed(1)} KB → 压缩后 ${(blob.size / 1024).toFixed(1)} KB` +
-        `（${fmt.split("/")[1].toUpperCase()}，节省 ${Math.max(0, 100 - (blob.size / orig) * 100).toFixed(0)}%）`;
-    } catch (e) { alert(e.message); }
-    finally { setLoading(card, false); }
-  });
-});
-
-// 质量滑块联动显示
-document.querySelectorAll(".q").forEach((q) => {
-  q.addEventListener("input", () => { $(".q-val", q.closest(".opts")).textContent = q.value; });
-});
-
-// ---------- 换一张 ----------
-document.querySelectorAll(".reset").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const card = btn.closest(".card");
-    $(".result", card).hidden = true;
-    $(".opts", card)?.setAttribute("hidden", "");
-  });
-});
-
-// ---------- 工具函数 ----------
-function readDims(file) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => { resolve({ w: img.naturalWidth, h: img.naturalHeight }); URL.revokeObjectURL(url); };
-    img.onerror = () => { reject(new Error("无法读取图片尺寸")); URL.revokeObjectURL(url); };
-    img.src = url;
-  });
-}
 
 function compress(file, fmt, quality, maxw) {
   return new Promise((resolve, reject) => {
@@ -135,9 +82,8 @@ function compress(file, fmt, quality, maxw) {
       canvas.width = w; canvas.height = h;
       canvas.getContext("2d").drawImage(img, 0, 0, w, h);
       URL.revokeObjectURL(url);
-      // PNG 不支持 quality
       const q = fmt === "image/png" ? undefined : quality;
-      canvas.toBlob((b) => b ? resolve(b) : reject(new Error("压缩失败")), fmt, q);
+      canvas.toBlob((b) => b ? resolve(b) : reject(new Error("导出失败")), fmt, q);
     };
     img.onerror = () => reject(new Error("无法读取图片"));
     img.src = url;
